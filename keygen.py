@@ -5,6 +5,7 @@ import sys
 import json
 import socket
 import base64
+import psutil
 import getpass
 import datetime
 import requests
@@ -29,11 +30,9 @@ def githubPost(username, password, public_key, key_title):
         os.remove(key_title+".pub")
     print("Done! :)")
 
-# TODO fix this...
 def parseAgentEnv(output):
     result = {}
-    for name, value in re.findall(r'([A-Z_]+)=([^;]+);',
-                                  output.decode('ascii')):
+    for name, value in re.findall("([A-Z_]+)=([^;]+);", output):
         result[name] = value
     return result
 
@@ -41,9 +40,9 @@ def ssh(email):
     print("Generating SSH key...")
 
     key = rsa.generate_private_key(
-    backend=crypto_default_backend(),
-    public_exponent=65537,
-    key_size=4096
+        backend=crypto_default_backend(),
+        public_exponent=65537,
+        key_size=4096
     )
     private_key = key.private_bytes(
         crypto_serialization.Encoding.PEM,
@@ -70,10 +69,27 @@ def ssh(email):
     print("Adding private key to ssh agent...")
 
     try:
-        output = subprocess.check_output(['ssh-agent', '-s'])
-        subprocess.check_call(['ssh-add', privk], env=parseAgentEnv(output))
-    except:
+        agent_pid = os.environ.get("SSH_AGENT_PID")
+        if agent_pid is not None and psutil.pid_exists(int(agent_pid)):
+            os.environ["SSH_AGENT_PID"] = agent_pid
+            print("Using the ssh-agent that is already running...")
+        else:
+            print("Starting a new ssh-agent...")
+            output = subprocess.check_output(["ssh-agent", "-s"])
+            env = parseAgentEnv(str(output))
+            os.environ["SSH_AUTH_SOCK"] = env["SSH_AUTH_SOCK"]
+            os.environ["SSH_AGENT_PID"] = env["SSH_AGENT_PID"]
+            print("Set SSH_AUTH_SOCK to " + env["SSH_AUTH_SOCK"])
+            print("Set SSH_AGENT_PID to " + env["SSH_AGENT_PID"])
+        # Python 2
+        if sys.version_info[0] == 2:
+            subprocess.check_call(["ssh-add", privk])
+        # Python 3
+        else:
+            subprocess.check_call(["ssh-add", privk])
+    except Exception as e:
         print("---")
+        print(e)
         print("Removing generated ssh keys due to error...")
         os.remove(privk)
         os.remove(pubk)
