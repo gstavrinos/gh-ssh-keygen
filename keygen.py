@@ -15,10 +15,10 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 
-def githubPost(username, password, public_key, key_title):
+def githubPost(username, password, public_key, private_key):
     print("Deploying the newly created public key on Github...")
     url = "https://api.github.com/user/keys"
-    data = {"title": socket.gethostname()+"_"+key_title, "key": public_key}
+    data = {"title": socket.gethostname()+"_"+private_key, "key": public_key}
     headers = {"content-type": "application/json", "username": username, "authorization": "Basic "+base64.encodestring(("%s:%s" % (username,password)).encode()).decode().strip()}
     r = requests.post(url, headers=headers, data=json.dumps(data))
     if r.status_code != 201:
@@ -26,8 +26,16 @@ def githubPost(username, password, public_key, key_title):
         print(r.content)
         print("---")
         print("Removing generated ssh keys due to error...")
-        os.remove(key_title)
-        os.remove(key_title+".pub")
+        os.remove(private_key)
+        os.remove(private_key+".pub")
+    else:
+        target = os.path.expanduser("~") + os.sep + ".ssh" + os.sep
+        s = "\nHost github.com\n\tAddKeysToAgent yes\n\tIdentityFile " + private_key + "\n\n"
+        print("Appending the following to " + target + "config file...")
+        print(s)
+        with open(target + "config", "a") as config:
+            config.write(s)
+
     print("Done! :)")
 
 def parseAgentEnv(output):
@@ -36,7 +44,7 @@ def parseAgentEnv(output):
         result[name] = value
     return result
 
-def ssh(email):
+def ssh():
     print("Generating SSH key...")
 
     key = rsa.generate_private_key(
@@ -53,7 +61,7 @@ def ssh(email):
         crypto_serialization.PublicFormat.OpenSSH
     )
 
-    public_key = public_key.decode("utf-8") + " "+email+"\n"
+    public_key = public_key.decode("utf-8") + "\n"
 
     home = os.path.expanduser("~")
     privk = home + os.sep + ".ssh" + os.sep + "gh-ssh-keygen-" + datetime.datetime.now().strftime("%d-%m-%Y-%H-%M-%S")
@@ -66,7 +74,6 @@ def ssh(email):
     with open(pubk, "w") as f:
         f.write(public_key)
 
-    print("Adding private key to ssh agent...")
 
     try:
         agent_pid = os.environ.get("SSH_AGENT_PID")
@@ -77,10 +84,11 @@ def ssh(email):
             print("Starting a new ssh-agent...")
             output = subprocess.check_output(["ssh-agent", "-s"])
             env = parseAgentEnv(str(output))
-            os.environ["SSH_AUTH_SOCK"] = env["SSH_AUTH_SOCK"]
-            os.environ["SSH_AGENT_PID"] = env["SSH_AGENT_PID"]
             print("Set SSH_AUTH_SOCK to " + env["SSH_AUTH_SOCK"])
             print("Set SSH_AGENT_PID to " + env["SSH_AGENT_PID"])
+            os.environ["SSH_AUTH_SOCK"] = env["SSH_AUTH_SOCK"]
+            os.environ["SSH_AGENT_PID"] = env["SSH_AGENT_PID"]
+        print("Adding private key to ssh agent...")
         # Python 2
         if sys.version_info[0] == 2:
             subprocess.check_call(["ssh-add", privk])
@@ -100,19 +108,16 @@ def ssh(email):
 
 if __name__ == "__main__":
     username = ""
-    email = ""
     try:
         # Python 2
-        email = raw_input("Please enter your Github email:")
         username = raw_input("Please enter your Github username:")
     except:
         # Python 3
-        email = str(input("Please enter your Github email:"))
         username = str(input("Please enter your Github username:"))
 
     password = str(getpass.getpass("Please enter your Github password: (not saved on disk)"))
 
-    pk, title = ssh(email)
+    pk, prk = ssh()
 
     if pk is not None:
-        githubPost(username, password, pk, title)
+        githubPost(username, password, pk, prk)
