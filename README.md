@@ -9,6 +9,6 @@ software installed.
 ### Required Software
 
 * SSH.
-* Python Libraries: json, socket, base64, getpass, datetime, requests, subprocess, cryptography.
+* Python Libraries: json, socket, base64, psutil, getpass, datetime, requests, subprocess, cryptography.
 
 
