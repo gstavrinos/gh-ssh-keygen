@@ -4,7 +4,6 @@ import re
 import sys
 import json
 import socket
-import base64
 import psutil
 import getpass
 import datetime
@@ -15,11 +14,11 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 
-def githubPost(username, password, public_key, private_key):
+def githubPost(pat, public_key, private_key):
     print("Deploying the newly created public key on Github...")
     url = "https://api.github.com/user/keys"
     data = {"title": socket.gethostname()+"_"+private_key, "key": public_key}
-    headers = {"content-type": "application/json", "username": username, "authorization": "Basic "+base64.encodestring(("%s:%s" % (username,password)).encode()).decode().strip()}
+    headers = {"content-type": "application/json", "authorization": "token "+pat}
     r = requests.post(url, headers=headers, data=json.dumps(data))
     if r.status_code != 201:
         print("ERROR: "+str(r.status_code))
@@ -107,17 +106,11 @@ def ssh():
 
 
 if __name__ == "__main__":
-    username = ""
-    try:
-        # Python 2
-        username = raw_input("Please enter your Github username:")
-    except:
-        # Python 3
-        username = str(input("Please enter your Github username:"))
-
-    password = str(getpass.getpass("Please enter your Github password: (not saved on disk)"))
+    
+    pat = str(getpass.getpass("Please enter a Personal Access Token with admin:public_key permissions: (not saved on disk)"))
 
     pk, prk = ssh()
 
     if pk is not None:
-        githubPost(username, password, pk, prk)
+        githubPost(pat, pk, prk)
+
