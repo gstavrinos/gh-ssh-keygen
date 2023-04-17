@@ -10,7 +10,7 @@ import datetime
 import requests
 import subprocess
 
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import rsa, ec
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
 
@@ -46,11 +46,16 @@ def parseAgentEnv(output):
 def ssh():
     print("Generating SSH key...")
 
-    key = rsa.generate_private_key(
-        backend=crypto_default_backend(),
-        public_exponent=65537,
-        key_size=4096
-    )
+    key = None
+    try:
+        key = ec.generate_private_key(ec.SECP256R1())
+    except:
+        print("Failed while creating a ECDSA private key.. Continuing with RSA...")
+        key = rsa.generate_private_key(
+            backend=crypto_default_backend(),
+            public_exponent=65537,
+            key_size=4096
+        )
     private_key = key.private_bytes(
         crypto_serialization.Encoding.PEM,
         crypto_serialization.PrivateFormat.PKCS8,
@@ -72,7 +77,6 @@ def ssh():
     print("Saving public key to {}...".format(pubk))
     with open(pubk, "w") as f:
         f.write(public_key)
-
 
     try:
         agent_pid = os.environ.get("SSH_AGENT_PID")
@@ -106,7 +110,7 @@ def ssh():
 
 
 if __name__ == "__main__":
-    
+
     pat = str(getpass.getpass("Please enter a Personal Access Token with admin:public_key permissions: (not saved on disk)"))
 
     pk, prk = ssh()
